@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Soft Blob</title>
+<style>
+  :root {
+    --accent: hsl(25, 68%, 52%);
+    --accent-light: hsl(25, 68%, 68%);
+    --accent-dark: hsl(25, 68%, 28%);
+    --panel-bg: rgba(10, 18, 32, 0.92);
+    --slider-track: rgba(255,255,255,0.08);
+    --text: rgba(255,255,255,0.7);
+    --text-dim: rgba(255,255,255,0.4);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0d1b2a; touch-action: none; -webkit-tap-highlight-color: transparent; }
+  canvas { display: block; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+
+  #opts-btn {
+    position: fixed; top: 14px; right: 14px; z-index: 100;
+    background: var(--panel-bg); color: var(--text);
+    border: 1px solid rgba(255,255,255,0.1); border-radius: 8px;
+    padding: 8px 16px; font: 600 13px/1 'Courier New', monospace;
+    cursor: pointer; letter-spacing: 0.5px;
+    transition: background 0.2s, border-color 0.2s, transform 0.15s;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  #opts-btn:hover { border-color: var(--accent); background: rgba(15,25,42,0.95); }
+  #opts-btn:active { transform: scale(0.96); }
+  #opts-btn.open { border-color: var(--accent); color: var(--accent-light); }
+
+  #opts-panel {
+    position: fixed; top: 0; right: 0; z-index: 99;
+    width: 280px; max-width: 90vw; height: 100vh;
+    background: var(--panel-bg);
+    border-left: 1px solid rgba(255,255,255,0.07);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow-y: auto; overflow-x: hidden;
+    padding: 56px 18px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.1) transparent;
+  }
+  #opts-panel.open { transform: translateX(0); }
+  #opts-panel::-webkit-scrollbar { width: 5px; }
+  #opts-panel::-webkit-scrollbar-track { background: transparent; }
+  #opts-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+  .opts-title {
+    font: 700 15px/1 'Courier New', monospace;
+    color: var(--accent-light); letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 18px;
+  }
+  .opts-lang-row {
+    margin-top: -6px;
+    margin-bottom: 16px;
+  }
+  .opts-group { margin-bottom: 16px; }
+  .opts-group-title {
+    font: 600 11px/1 'Courier New', monospace;
+    color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1.5px; margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .opts-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 9px;
+  }
+  .opts-label {
+    font: 400 11.5px/1 'Courier New', monospace;
+    color: var(--text); flex-shrink: 0; margin-right: 8px;
+  }
+  .opts-val {
+    font: 600 11px/1 'Courier New', monospace;
+    color: var(--accent-light); min-width: 38px;
+    text-align: right; flex-shrink: 0;
+  }
+  .opts-slider {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 4px; margin: 0 6px;
+    background: var(--slider-track); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  .opts-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--accent-dark);
+    cursor: pointer; transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .opts-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2); box-shadow: 0 0 8px var(--accent);
+  }
+  .opts-slider::-moz-range-thumb {
+    width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--accent-dark);
+    cursor: pointer;
+  }
+  .opts-slider::-moz-range-track {
+    height: 4px; background: var(--slider-track); border-radius: 2px; border: none;
+  }
+
+  .opts-select {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 26px; margin-left: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 5px; color: var(--text);
+    font: 400 11px/1.3 'Courier New', monospace;
+    padding: 0 24px 0 8px; cursor: pointer; outline: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.4)'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 8px center;
+    transition: border-color 0.15s;
+  }
+  .opts-select:hover { border-color: var(--accent); }
+  .opts-select:focus { border-color: var(--accent-light); }
+  .opts-select option { background: #111b2e; color: var(--text); font: 400 11px/1.4 'Courier New', monospace; }
+
+  /* Color picker */
+  .opts-color {
+    -webkit-appearance: none; appearance: none;
+    width: 36px; height: 26px; margin-left: auto;
+    border: 2px solid rgba(255,255,255,0.15);
+    border-radius: 5px; cursor: pointer;
+    background: none; padding: 0;
+    transition: border-color 0.15s, transform 0.12s;
+  }
+  .opts-color:hover { border-color: var(--accent); transform: scale(1.08); }
+  .opts-color::-webkit-color-swatch-wrapper { padding: 2px; }
+  .opts-color::-webkit-color-swatch { border: none; border-radius: 2px; }
+  .opts-color::-moz-color-swatch { border: none; border-radius: 2px; }
+
+  .opts-btn-row { display: flex; gap: 8px; margin-top: 14px; }
+  .opts-action {
+    flex: 1; padding: 8px 0; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px; background: rgba(255,255,255,0.03);
+    color: var(--text); font: 600 11px/1 'Courier New', monospace;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .opts-action:hover { border-color: var(--accent); background: rgba(255,255,255,0.06); }
+  .opts-action:active { transform: scale(0.97); }
+</style>
+</head>
+<body>
+<canvas id="c" aria-label="Interactive soft-body blob simulation"></canvas>
+
+<button id="opts-btn" data-i18n="optionsBtn">Options</button>
+<div id="opts-panel">
+  <div class="opts-title" data-i18n="panelTitle">Physics</div>
+
+  <div class="opts-row opts-lang-row">
+    <span class="opts-label" data-i18n="language">Language</span>
+    <select class="opts-select" id="s-lang">
+      <option value="en">English</option>
+      <option value="ar">العربية</option>
+    </select>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="appearance">Appearance</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="size">Size</span>
+      <input class="opts-slider" id="s-size" type="range" min="0.4" max="2.5" step="0.05" value="1">
+      <span class="opts-val" id="v-size">1.00</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="color">Color</span>
+      <input class="opts-color" id="s-color" type="color" value="#d97a3a">
+    </div>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="body">Body</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="stiffness">Stiffness</span>
+      <input class="opts-slider" id="s-bodyK" type="range" min="0.1" max="3" step="0.05" value="1">
+      <span class="opts-val" id="v-bodyK">1.00</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="damping">Damping</span>
+      <input class="opts-slider" id="s-bodyD" type="range" min="0.1" max="3" step="0.05" value="1">
+      <span class="opts-val" id="v-bodyD">1.00</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="pressure">Pressure</span>
+      <input class="opts-slider" id="s-press" type="range" min="0.1" max="3" step="0.05" value="1">
+      <span class="opts-val" id="v-press">1.00</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="gravity">Gravity</span>
+      <input class="opts-slider" id="s-grav" type="range" min="0" max="800" step="10" value="280">
+      <span class="opts-val" id="v-grav">280</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="gravCenter">Grav Center</span>
+      <select class="opts-select" id="s-gravCenter">
+        <option value="bottom" data-i18n-option="bottom">Bottom</option>
+        <option value="center" data-i18n-option="center">Center</option>
+      </select>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="airResist">Air Resist</span>
+      <input class="opts-slider" id="s-damp" type="range" min="0.93" max="1" step="0.001" value="0.984">
+      <span class="opts-val" id="v-damp">0.984</span>
+    </div>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="breathing">Breathing</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="speed">Speed</span>
+      <input class="opts-slider" id="s-bSpd" type="range" min="0" max="3" step="0.05" value="0.7">
+      <span class="opts-val" id="v-bSpd">0.70</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="amplitude">Amplitude</span>
+      <input class="opts-slider" id="s-bAmp" type="range" min="0" max="0.12" step="0.002" value="0.028">
+      <span class="opts-val" id="v-bAmp">0.028</span>
+    </div>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="antenna">Antenna</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="stiffness">Stiffness</span>
+      <input class="opts-slider" id="s-antK" type="range" min="0.1" max="3" step="0.05" value="1">
+      <span class="opts-val" id="v-antK">1.00</span>
+    </div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="damping">Damping</span>
+      <input class="opts-slider" id="s-antD" type="range" min="0.1" max="3" step="0.05" value="1">
+      <span class="opts-val" id="v-antD">1.00</span>
+    </div>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="face">Face</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="rigidity">Rigidity</span>
+      <input class="opts-slider" id="s-face" type="range" min="0" max="1" step="0.05" value="0.8">
+      <span class="opts-val" id="v-face">0.80</span>
+    </div>
+  </div>
+
+  <div class="opts-group">
+    <div class="opts-group-title" data-i18n="simulation">Simulation</div>
+    <div class="opts-row">
+      <span class="opts-label" data-i18n="substeps">Substeps</span>
+      <input class="opts-slider" id="s-sub" type="range" min="1" max="8" step="1" value="4">
+      <span class="opts-val" id="v-sub">4</span>
+    </div>
+  </div>
+
+  <div class="opts-btn-row">
+    <button class="opts-action" id="btn-defaults" data-i18n="defaults">Defaults</button>
+    <button class="opts-action" id="btn-reset" data-i18n="resetShape">Reset Shape</button>
+  </div>
+</div>
+
+<script>
+/* ==========================================================
+   SOFT-BODY BLOB — Full physics, size & color options
+   ========================================================== */
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+let blobR = 100;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', () => { resize(); initParticles(); });
+
+const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ==================== ADJUSTABLE PHYSICS PARAMS ==================== */
+/* Tuned for jelly-drop behavior: edges firm but extensible, strong
+   non-negative pressure acting like incompressible fluid, gentle shape
+   matching pulling toward the rigid rest outline, and bending constraints
+   keeping the curvature smooth. Opposite-diameter springs removed so the
+   back of the blob can't be pulled inward when one side is tugged. */
+const BASE_SPRING_K   = 900;
+const BASE_SPRING_DAMP = 18;
+const BASE_PRESSURE_K  = 12000;
+const NUM_NODES        = 40;
+const FLOOR_Y_OFFSET   = 40;
+const MAX_ANT_VEL      = 400;
+const MAX_NODE_VEL     = 1800;   /* separate, higher cap for body nodes */
+const MAX_IMPULSE      = 200;
+
+/* Soft-radius grabbing: pull a weighted neighborhood, not a single node */
+const GRAB_RADIUS_RATIO  = 0.38; /* grab radius as a fraction of blobR */
+const DRAG_STIFFNESS     = 1100; /* spring-like force driving grabbed nodes */
+const DRAG_DAMP          = 18;   /* tracks target velocity for sticky feel */
+const ANT_DRAG_STIFFNESS = 260;  /* lighter stiffness -> whip feel */
+const BODY_DRAG_K        = 9;    /* impulse gain for whole-body grab */
+
+/* Shape matching: 3% correction per substep (inside 2-5% range) */
+const SHAPE_MATCH_A = 0.03;
+
+/* Bending constraint strength (angle errors are in radians, so ~2x base K) */
+const BEND_K = BASE_SPRING_K * 2;
+
+/* Solver stability: light positional smoothing toward neighbor midpoint */
+const NEIGHBOR_SMOOTH = 0.05;
+
+let gravityVal     = 280;
+let gravityCenter  = 'bottom';
+let nodeDampVal    = 0.984;
+let breathSpeedVal = prefersReduced ? 0.2 : 0.7;
+let breathAmpVal   = 0.028;
+let faceRigidity   = 0.8;
+let sizeMul        = 1.0;
+
+let bodyKMul  = 1.0;
+let bodyDMul  = 1.0;
+let antKMul   = 1.0;
+let antDMul   = 1.0;
+let pressMul  = 1.0;
+let substepsVal = 4;
+
+/* ==================== COLOR SYSTEM ==================== */
+let blobHue = 25;
+let blobCol, blobColLight, blobColDark, blobColHL;
+
+function updateColors() {
+  blobCol      = `hsl(${blobHue}, 68%, 52%)`;
+  blobColLight = `hsl(${blobHue}, 68%, 68%)`;
+  blobColDark  = `hsl(${blobHue}, 68%, 28%)`;
+  blobColHL    = `hsl(${blobHue}, 45%, 82%)`;
+  const r = document.documentElement.style;
+  r.setProperty('--accent', blobCol);
+  r.setProperty('--accent-light', blobColLight);
+  r.setProperty('--accent-dark', blobColDark);
+}
+updateColors();
+
+const i18n = {
+  en: {
+    optionsBtn: 'Options',
+    panelTitle: 'Physics',
+    language: 'Language',
+    appearance: 'Appearance',
+    body: 'Body',
+    breathing: 'Breathing',
+    antenna: 'Antenna',
+    face: 'Face',
+    simulation: 'Simulation',
+    size: 'Size',
+    color: 'Color',
+    stiffness: 'Stiffness',
+    damping: 'Damping',
+    pressure: 'Pressure',
+    gravity: 'Gravity',
+    gravCenter: 'Grav Center',
+    airResist: 'Air Resist',
+    speed: 'Speed',
+    amplitude: 'Amplitude',
+    rigidity: 'Rigidity',
+    substeps: 'Substeps',
+    defaults: 'Defaults',
+    resetShape: 'Reset Shape',
+    bottom: 'Bottom',
+    center: 'Center',
+    english: 'English',
+    arabic: 'العربية'
+  },
+  ar: {
+    optionsBtn: 'الخيارات',
+    panelTitle: 'الخواص الفيزيائية',
+    language: 'اللغة',
+    appearance: 'المظهر',
+    body: 'الجسم',
+    breathing: 'التنفس',
+    antenna: 'الهوائي',
+    face: 'الوجه',
+    simulation: 'المحاكاة',
+    size: 'الحجم',
+    color: 'اللون',
+    stiffness: 'الصلابة',
+    damping: 'التخميد',
+    pressure: 'الضغط',
+    gravity: 'الجاذبية',
+    gravCenter: 'مركز الجاذبية',
+    airResist: 'مقاومة الهواء',
+    speed: 'السرعة',
+    amplitude: 'السعة',
+    rigidity: 'الصلابة',
+    substeps: 'الخطوات الفرعية',
+    defaults: 'الإعدادات الافتراضية',
+    resetShape: 'إعادة الشكل',
+    bottom: 'الأسفل',
+    center: 'المركز',
+    english: 'الإنجليزية',
+    arabic: 'العربية'
+  }
+};
+
+function applyTranslation(lang) {
+  const dict = i18n[lang] || i18n.en;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+  document.body.dir = lang === 'ar' ? 'rtl' : 'ltr';
+
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (dict[key]) el.textContent = dict[key];
+  });
+
+  document.querySelectorAll('[data-i18n-option]').forEach(el => {
+    const key = el.dataset.i18nOption;
+    if (dict[key]) el.textContent = dict[key];
+  });
+
+  const langSelect = document.getElementById('s-lang');
+  if (langSelect) langSelect.value = lang;
+}
+
+const langSelect = document.getElementById('s-lang');
+if (langSelect) {
+  langSelect.addEventListener('change', () => applyTranslation(langSelect.value));
+  applyTranslation(langSelect.value || 'en');
+}
+
+/* Convert HSL (hue 0-360, sat 0-100, light 0-100) to hex */
+function hslToHex(h, s, l) {
+  s /= 100; l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = n => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * Math.max(0, Math.min(1, color))).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/* Convert hex to hue (0-360) */
+function hexToHue(hex) {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  if (max === min) return 0;
+  const d = max - min;
+  let h;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (max === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return h * 360;
+}
+
+/* ==================== NODE CLASS ==================== */
+class Node {
+  constructor(x, y, mass) {
+    this.x = x;  this.y = y;
+    this.vx = 0;  this.vy = 0;
+    this.fx = 0;  this.fy = 0;
+    this.mass = mass || 1;
+    /* Per-node velocity clamp: body nodes use the higher body cap, antenna
+       nodes (mass < 1) keep the tight antenna cap for whip-like behavior. */
+    this.vmax = (this.mass >= 1) ? MAX_NODE_VEL : MAX_ANT_VEL;
+  }
+  push(fx, fy) { this.fx += fx; this.fy += fy; }
+  step(dt) {
+    const ax = this.fx / this.mass;
+    const ay = this.fy / this.mass;
+    this.vx = (this.vx + ax * dt) * nodeDampVal;
+    this.vy = (this.vy + ay * dt) * nodeDampVal;
+    const spd = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+    if (spd > this.vmax) { const s = this.vmax / spd; this.vx *= s; this.vy *= s; }
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.fx = 0; this.fy = 0;
+  }
+}
+
+/* ==================== SPRING CLASS ==================== */
+class Spring {
+  constructor(a, b, k, d, rest, group) {
+    this.a = a; this.b = b;
+    this.baseK = k; this.baseD = d;
+    this.group = group || 'body';
+    if (rest != null) { this.rest = rest; }
+    else {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      this.rest = Math.sqrt(dx * dx + dy * dy);
+    }
+  }
+  apply() {
+    const k = this.baseK * (this.group === 'antenna' ? antKMul : bodyKMul);
+    const d = this.baseD * (this.group === 'antenna' ? antDMul : bodyDMul);
+    const dx = this.b.x - this.a.x;
+    const dy = this.b.y - this.a.y;
+    let dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1e-4) dist = 1e-4;
+    const nx = dx / dist, ny = dy / dist;
+    const stretch = dist - this.rest;
+    const dvx = this.b.vx - this.a.vx;
+    const dvy = this.b.vy - this.a.vy;
+    const f = k * stretch + d * (dvx * nx + dvy * ny);
+    const fx = f * nx, fy = f * ny;
+    this.a.push(fx, fy);
+    this.b.push(-fx, -fy);
+  }
+}
+
+/* ==================== BLOB STATE ==================== */
+let nodes = [], springs = [];
+let antNodes = [], antSprings = [];
+let restArea = 1;
+let restEdgeLen = 0;          /* minimum-edge-length guard baseline */
+let restLocal = [];           /* rest positions relative to rest centroid */
+let restAngles = [];          /* rest turn angle at each node (bending) */
+let antImpulseX = 0, antImpulseY = 0;
+
+function createBlob() {
+  /* Save old center to reposition after resize */
+  let oldCx = W / 2, oldCy = H * 0.5;
+  if (nodes.length) {
+    const oc = getCenter();
+    oldCx = oc.x; oldCy = oc.y;
+  }
+
+  nodes = []; springs = [];
+  antNodes = []; antSprings = [];
+
+  blobR = Math.max(40, Math.min(W, H) * 0.15) * sizeMul;
+  const cx = oldCx;
+  const cy = gravityCenter === 'center' ? Math.min(oldCy, H * 0.45) : Math.min(oldCy, H - blobR - FLOOR_Y_OFFSET - 10);
+
+  for (let i = 0; i < NUM_NODES; i++) {
+    const a = (i / NUM_NODES) * Math.PI * 2 - Math.PI / 2;
+    nodes.push(new Node(cx + blobR * Math.cos(a), cy + blobR * Math.sin(a)));
+  }
+
+  for (let i = 0; i < NUM_NODES; i++)
+    springs.push(new Spring(nodes[i], nodes[(i + 1) % NUM_NODES], BASE_SPRING_K, BASE_SPRING_DAMP, null, 'body'));
+  /* Skip-2 springs act as bending/shear ties; kept softer than edges so they
+     don't fight the volume/shape-match terms. */
+  for (let i = 0; i < NUM_NODES; i++)
+    springs.push(new Spring(nodes[i], nodes[(i + 2) % NUM_NODES], BASE_SPRING_K * 0.30, BASE_SPRING_DAMP * 0.4, null, 'body'));
+  /* Skip-4 stays weak: light long-range shear resistance only. */
+  for (let i = 0; i < NUM_NODES; i++)
+    springs.push(new Spring(nodes[i], nodes[(i + 4) % NUM_NODES], BASE_SPRING_K * 0.06, BASE_SPRING_DAMP * 0.3, null, 'body'));
+  /* NOTE: opposite-diameter springs (i to i + half) were removed here.
+     They flattened the blob into a lens under tension and let the back
+     side dimple inward when one side was pulled. Pressure + shape matching
+     and bending now handle the "stay round" behavior instead. */
+
+  restArea = calcArea();
+
+  /* Cache rest-shape data for shape matching and bending constraints. */
+  const c0 = getCenter();
+  restLocal = nodes.map(n => ({ x: n.x - c0.x, y: n.y - c0.y }));
+  restAngles = [];
+  for (let i = 0; i < NUM_NODES; i++) {
+    const p = (i - 1 + NUM_NODES) % NUM_NODES;
+    const q = (i + 1) % NUM_NODES;
+    restAngles.push(restAngle(nodes[p], nodes[i], nodes[q]));
+  }
+  /* Baseline for the minimum-edge-length guard: average edge rest length. */
+  let sumLen = 0;
+  for (let i = 0; i < NUM_NODES; i++) {
+    const a = nodes[i], b = nodes[(i + 1) % NUM_NODES];
+    sumLen += Math.hypot(b.x - a.x, b.y - a.y);
+  }
+  restEdgeLen = sumLen / NUM_NODES;
+
+  /* Antenna */
+  let prev = nodes[0];
+  const antSegLen = blobR * 0.1;
+  for (let i = 0; i < 7; i++) {
+    const n = new Node(prev.x, prev.y - antSegLen, 0.5);
+    antNodes.push(n);
+    const kMul = 1.4 - i * 0.1;
+    const dMul = 1.3 - i * 0.1;
+    antSprings.push(new Spring(prev, n,
+      BASE_SPRING_K * Math.max(kMul, 0.7),
+      BASE_SPRING_DAMP * Math.max(dMul, 0.65), null, 'antenna'));
+    prev = n;
+  }
+  for (let i = 0; i < antNodes.length - 1; i++)
+    antSprings.push(new Spring(antNodes[i], antNodes[i + 1], BASE_SPRING_K * 0.65, BASE_SPRING_DAMP * 0.7, null, 'antenna'));
+  for (let i = 0; i < antNodes.length - 2; i++)
+    antSprings.push(new Spring(antNodes[i], antNodes[i + 2], BASE_SPRING_K * 0.35, BASE_SPRING_DAMP * 0.5, null, 'antenna'));
+
+  antImpulseX = 0;
+  antImpulseY = 0;
+}
+
+/* ==================== GEOMETRY HELPERS ==================== */
+function calcArea() {
+  let a = 0;
+  for (let i = 0; i < NUM_NODES; i++) {
+    const j = (i + 1) % NUM_NODES;
+    a += nodes[i].x * nodes[j].y - nodes[j].x * nodes[i].y;
+  }
+  return Math.abs(a) * 0.5;
+}
+
+function getCenter() {
+  let cx = 0, cy = 0;
+  for (const n of nodes) { cx += n.x; cy += n.y; }
+  return { x: cx / NUM_NODES, y: cy / NUM_NODES };
+}
+
+function getAvgVel() {
+  let vx = 0, vy = 0;
+  for (const n of nodes) { vx += n.vx; vy += n.vy; }
+  return { x: vx / NUM_NODES, y: vy / NUM_NODES };
+}
+
+function getSpeed() {
+  const v = getAvgVel();
+  return Math.sqrt(v.x * v.x + v.y * v.y);
+}
+
+function isInside(px, py) {
+  let inside = false;
+  for (let i = 0, j = NUM_NODES - 1; i < NUM_NODES; j = i++) {
+    const xi = nodes[i].x, yi = nodes[i].y;
+    const xj = nodes[j].x, yj = nodes[j].y;
+    if (((yi > py) !== (yj > py)) && (px < (xj - xi) * (py - yi) / (yj - yi) + xi))
+      inside = !inside;
+  }
+  return inside;
+}
+
+function nearestNode(px, py, list) {
+  let best = null, bestD = Infinity;
+  for (const n of list) {
+    const d = (n.x - px) ** 2 + (n.y - py) ** 2;
+    if (d < bestD) { bestD = d; best = n; }
+  }
+  return { node: best, dist: Math.sqrt(bestD) };
+}
+
+/* Signed turn angle at vertex B for points A-B-C (radians), (-pi, pi]. */
+function restAngle(a, b, c) {
+  const v1x = a.x - b.x, v1y = a.y - b.y;
+  const v2x = c.x - b.x, v2y = c.y - b.y;
+  const dot = v1x * v2x + v1y * v2y;
+  const cross = v1x * v2y - v1y * v2x;
+  return Math.atan2(cross, dot);
+}
+
+/* Collect body nodes within `radius`, weighted by a smooth falloff so the
+   grabbed region stretches like jelly rather than poking a single node. */
+function grabNodesInRadius(px, py, radius) {
+  const out = [];
+  let wsum = 0;
+  for (const n of nodes) {
+    const d = Math.hypot(n.x - px, n.y - py);
+    if (d < radius) {
+      const t = 1 - d / radius;
+      const w = t * t;            /* quadratic falloff */
+      out.push({ node: n, w });
+      wsum += w;
+    }
+  }
+  if (wsum > 0) for (const g of out) g.w /= wsum;  /* normalize */
+  return out;
+}
+
+/* ==================== SHAPE MATCHING ==================== */
+/* Pull each outline node toward the rigid rest shape, rotated to match the
+   blob's current orientation. Scale match is omitted on purpose so the
+   breathing area modulation still drives the desired volume. Applies `a`
+   fraction of the gap per substep (2-5% recommended). */
+function applyShapeMatch(a) {
+  if (!restLocal.length) return;
+  const c = getCenter();
+  /* 2D optimal rotation: angle theta that best aligns restLocal -> curLocal. */
+  let num = 0, den = 0;
+  for (let i = 0; i < NUM_NODES; i++) {
+    const rx = restLocal[i].x, ry = restLocal[i].y;
+    const cx = nodes[i].x - c.x, cy = nodes[i].y - c.y;
+    num += rx * cy - ry * cx;
+    den += rx * cx + ry * cy;
+  }
+  const theta = (den > 0 || num !== 0) ? Math.atan2(num, den) : 0;
+  const cosT = Math.cos(theta), sinT = Math.sin(theta);
+  for (let i = 0; i < NUM_NODES; i++) {
+    const rx = restLocal[i].x, ry = restLocal[i].y;
+    const tx = c.x + cosT * rx - sinT * ry;
+    const ty = c.y + sinT * rx + cosT * ry;
+    nodes[i].x += (tx - nodes[i].x) * a;
+    nodes[i].y += (ty - nodes[i].y) * a;
+  }
+}
+
+/* ==================== BENDING CONSTRAINT ==================== */
+/* Penalize the turn angle at each vertex vs its rest value, applying
+   corrective tangential forces to the apex and reaction to neighbors.
+   Keeps the outline smooth (no kinks the spline can't smooth away). */
+function applyBending() {
+  for (let i = 0; i < NUM_NODES; i++) {
+    const p = (i - 1 + NUM_NODES) % NUM_NODES;
+    const q = (i + 1) % NUM_NODES;
+    const cur = restAngle(nodes[p], nodes[i], nodes[q]);
+    const err = cur - restAngles[i];
+    /* Wrap err to (-pi, pi] so a tiny CCW step doesn't read as -2*PI. */
+    let e = err;
+    while (e > Math.PI) e -= 2 * Math.PI;
+    while (e < -Math.PI) e += 2 * Math.PI;
+    if (Math.abs(e) < 1e-4) continue;
+    const f = BEND_K * e;
+    const ax = nodes[i].x, ay = nodes[i].y;
+    const dpx = ax - nodes[p].x, dpy = ay - nodes[p].y;
+    const dql = Math.hypot(dpx, dpy) || 1e-4;
+    const tpx = -dpy / dql, tpy = dpx / dql;        /* tangent to (p->i) */
+    nodes[i].push(-tpx * f * 0.5, -tpy * f * 0.5);
+    nodes[p].push( tpx * f * 0.25,  tpy * f * 0.25);
+    const dqx = nodes[q].x - ax, dqy = nodes[q].y - ay;
+    const dqr = Math.hypot(dqx, dqy) || 1e-4;
+    const tqx = -dqy / dqr, tqy = dqx / dqr;        /* tangent to (i->q) */
+    nodes[i].push( tqx * f * 0.5,  tqy * f * 0.5);
+    nodes[q].push(-tqx * f * 0.25, -tqy * f * 0.25);
+  }
+}
+
+/* ==================== SELF-INTERSECTION RESOLVE ==================== */
+/* Push apart pairs of non-adjacent edges that cross. Tiny positional
+   correction keeps the polygon simple; O(N^2) over 40 nodes = trivial. */
+function resolveSelfIntersections() {
+  const n = NUM_NODES;
+  for (let i = 0; i < n; i++) {
+    const ai = i, bi = (i + 1) % n;
+    const ax0 = nodes[ai].x, ay0 = nodes[ai].y;
+    const bx0 = nodes[bi].x, by0 = nodes[bi].y;
+    for (let j = i + 2; j < n; j++) {
+      const ci = j, di = (j + 1) % n;
+      if (ai === di || bi === ci) continue;   /* adjacent edges share a node */
+      const cx0 = nodes[ci].x, cy0 = nodes[ci].y;
+      const dx0 = nodes[di].x, dy0 = nodes[di].y;
+      const ix = segIntersect(ax0, ay0, bx0, by0, cx0, cy0, dx0, dy0);
+      if (!ix) continue;
+      /* Push the four nodes apart along the bisector of the crossing edges. */
+      const pcm = (nodes[ai].x + nodes[bi].x) * 0.5;
+      const pcmY = (nodes[ai].y + nodes[bi].y) * 0.5;
+      const pnm = (nodes[ci].x + nodes[di].x) * 0.5;
+      const pnmY = (nodes[ci].y + nodes[di].y) * 0.5;
+      let pvx = pcm - pnm, pvy = pcmY - pnmY;
+      const pl = Math.hypot(pvx, pvy) || 1e-4;
+      pvx /= pl; pvy /= pl;
+      const push = 1.2;
+      nodes[ai].x += pvx * push; nodes[ai].y += pvy * push;
+      nodes[bi].x += pvx * push; nodes[bi].y += pvy * push;
+      nodes[ci].x -= pvx * push; nodes[ci].y -= pvy * push;
+      nodes[di].x -= pvx * push; nodes[di].y -= pvy * push;
+    }
+  }
+}
+
+/* Standard 2D segment intersection test; returns true iff AB and CD cross. */
+function segIntersect(ax, ay, bx, by, cx, cy, dx, dy) {
+  const d1x = bx - ax, d1y = by - ay;
+  const d2x = dx - cx, d2y = dy - cy;
+  const denom = d1x * d2y - d1y * d2x;
+  if (Math.abs(denom) < 1e-9) return false;
+  const s = ((cx - ax) * d2y - (cy - ay) * d2x) / denom;
+  const t = ((cx - ax) * d1y - (cy - ay) * d1x) / denom;
+  return s > 1e-3 && s < 1 - 1e-3 && t > 1e-3 && t < 1 - 1e-3;
+}
+
+
+let time = 0, breathPhase = 0;
+
+function physicsStep(dt) {
+  time += dt;
+  breathPhase += breathSpeedVal * dt;
+  const bArea = restArea * (1 + breathAmpVal * Math.sin(breathPhase * Math.PI * 2));
+
+  if (gravityCenter === 'bottom') {
+    for (const n of nodes) n.push(0, gravityVal * n.mass);
+    for (const n of antNodes) n.push(0, gravityVal * n.mass * 0.18);
+  } else {
+    const gcx = W / 2, gcy = H / 2;
+    for (const n of nodes) {
+      const dx = gcx - n.x, dy = gcy - n.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) n.push(dx / d * gravityVal * n.mass, dy / d * gravityVal * n.mass);
+      else n.push(0, gravityVal * n.mass);
+    }
+    for (const n of antNodes) {
+      const dx = gcx - n.x, dy = gcy - n.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d > 1) n.push(dx / d * gravityVal * n.mass * 0.18, dy / d * gravityVal * n.mass * 0.18);
+      else n.push(0, gravityVal * n.mass * 0.18);
+    }
+  }
+
+  /* Multi-pointer drag forces. Each active finger contributes independently,
+     so multiple regions can be stretched at the same time. */
+  for (const state of activeDrags.values()) {
+    const tvx = (state.x - state.lastX) / Math.max(dt, 1e-5);
+    const tvy = (state.y - state.lastY) / Math.max(dt, 1e-5);
+
+    if (state.mode === 'softnode' && state.nodes.length) {
+      for (const g of state.nodes) {
+        const n = g.node;
+        const fx = DRAG_STIFFNESS * g.w * (state.x - n.x) +
+                   DRAG_DAMP * g.w * (tvx - n.vx);
+        const fy = DRAG_STIFFNESS * g.w * (state.y - n.y) +
+                   DRAG_DAMP * g.w * (tvy - n.vy);
+        n.push(fx, fy);
+      }
+    } else if (state.mode === 'antenna' && state.node) {
+      const n = state.node;
+      const fx = ANT_DRAG_STIFFNESS * (state.x - n.x) +
+                 DRAG_DAMP * 0.1 * (tvx - n.vx);
+      const fy = ANT_DRAG_STIFFNESS * (state.y - n.y) +
+                 DRAG_DAMP * 0.1 * (tvy - n.vy);
+      n.push(fx, fy);
+    } else if (state.mode === 'body') {
+      const c = getCenter();
+      const fx = BODY_DRAG_K * (state.x - c.x);
+      const fy = BODY_DRAG_K * (state.y - c.y);
+
+      for (const n of nodes) {
+        n.push(fx * n.mass, fy * n.mass);
+      }
+
+      antImpulseX = Math.max(-MAX_IMPULSE,
+        Math.min(MAX_IMPULSE, antImpulseX + fx * 0.05));
+      antImpulseY = Math.max(-MAX_IMPULSE,
+        Math.min(MAX_IMPULSE, antImpulseY + fy * 0.05));
+    }
+
+    state.lastX = state.x;
+    state.lastY = state.y;
+  }
+
+  for (const s of springs) s.apply();
+  for (const s of antSprings) s.apply();
+
+  /* Edge-distributed hydrostatic pressure. Pressure is clamped to >= 0 so
+     the blob only ever inflates to its target area, never sucks itself
+     inward (which is what previously dented the back side when tugged). */
+  const curArea = Math.max(calcArea(), 1);
+  let pressure = BASE_PRESSURE_K * pressMul * (bArea - curArea) / curArea;
+  if (pressure < 0) pressure = 0;
+  for (let i = 0; i < NUM_NODES; i++) {
+    const j = (i + 1) % NUM_NODES;
+    const ex = nodes[j].x - nodes[i].x;
+    const ey = nodes[j].y - nodes[i].y;
+    const l = Math.max(Math.hypot(ex, ey), 1e-4);
+    /* Outward normal (CCW polygon). Force split equally to both nodes. */
+    const nx = ey / l, ny = -ex / l;
+    const f = pressure * l * 0.5;
+    const fx = nx * f, fy = ny * f;
+    nodes[i].push(fx, fy);
+    nodes[j].push(fx, fy);
+  }
+
+  /* Bending constraint: penalize deviation from the rest turn angle at
+     every interior vertex, keeping the outline smooth and spline-friendly. */
+  applyBending();
+
+  for (const n of nodes) n.step(dt);
+
+  /* Shape matching: gently pull each node toward the rest outline, rotated
+     to match the blob's current orientation (3% per substep). Soft enough
+     not to fight breathing but enough to resist buckling. */
+  applyShapeMatch(SHAPE_MATCH_A);
+
+  /* Geometric guards: keep edges from collapsing and stop the polygon from
+     inverting or self-intersecting under aggressive grabs. */
+  for (let i = 0; i < NUM_NODES; i++) {
+    const j = (i + 1) % NUM_NODES;
+    const dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y;
+    const l = Math.hypot(dx, dy);
+    const minL = restEdgeLen * 0.5;
+    if (l < minL && l > 1e-4) {
+      const push = (minL - l) * 0.5;
+      const ux = dx / l, uy = dy / l;
+      nodes[i].x -= ux * push; nodes[i].y -= uy * push;
+      nodes[j].x += ux * push; nodes[j].y += uy * push;
+    }
+  }
+  resolveSelfIntersections();
+
+  /* Light positional smoothing toward neighbor midpoint: kills high-freq
+     jitter without erasing macro motion or macro deformation. */
+  for (let i = 0; i < NUM_NODES; i++) {
+    const p = (i - 1 + NUM_NODES) % NUM_NODES;
+    const q = (i + 1) % NUM_NODES;
+    const mx = (nodes[p].x + nodes[q].x) * 0.5;
+    const my = (nodes[p].y + nodes[q].y) * 0.5;
+    nodes[i].x += (mx - nodes[i].x) * NEIGHBOR_SMOOTH;
+    nodes[i].y += (my - nodes[i].y) * NEIGHBOR_SMOOTH;
+  }
+
+  for (let i = 0; i < antNodes.length; i++) {
+    const whipFactor = 0.15 + (i / antNodes.length) * 0.85;
+    antNodes[i].push(antImpulseX * whipFactor, antImpulseY * whipFactor);
+  }
+  antImpulseX *= 0.82;
+  antImpulseY *= 0.82;
+  if (Math.abs(antImpulseX) < 1) antImpulseX = 0;
+  else antImpulseX = Math.max(-MAX_IMPULSE, Math.min(MAX_IMPULSE, antImpulseX));
+  if (Math.abs(antImpulseY) < 1) antImpulseY = 0;
+  else antImpulseY = Math.max(-MAX_IMPULSE, Math.min(MAX_IMPULSE, antImpulseY));
+  for (const n of antNodes) n.step(dt);
+
+  const floor = H - FLOOR_Y_OFFSET;
+  const wall  = 25;
+  for (const n of nodes) {
+    if (n.y > floor) { n.y = floor; n.vy *= -0.25; n.vx *= 0.92; }
+    if (n.x < wall)  { n.x = wall;  n.vx *= -0.25; }
+    if (n.x > W - wall) { n.x = W - wall; n.vx *= -0.25; }
+    if (n.y < wall)  { n.y = wall;  n.vy *= -0.25; }
+  }
+  for (const n of antNodes) {
+    if (n.y > floor) { n.y = floor; n.vy *= -0.15; n.vx *= 0.9; }
+    if (n.x < wall)  { n.x = wall;  n.vx *= -0.1; }
+    if (n.x > W - wall) { n.x = W - wall; n.vx *= -0.1; }
+    if (n.y < wall)  { n.y = wall;  n.vy *= -0.1; }
+  }
+}
+
+/* ==================== INTERACTION ==================== */
+/* Multi-pointer interaction: every finger/mouse pointer gets its own
+   independent drag state, allowing several parts of the blob to be
+   grabbed and stretched simultaneously. */
+const mouse = { x: 0, y: 0 };
+const activeDrags = new Map();
+const DRAG_THRESH = 7;
+let surpriseTimer = 0;
+
+function evtPos(e) {
+  return { x: e.clientX, y: e.clientY };
+}
+
+function isUIEvent(e) {
+  return e.target.closest('#opts-panel') || e.target.closest('#opts-btn');
+}
+
+function beginDrag(e) {
+  if (isUIEvent(e)) return;
+  e.preventDefault();
+
+  const p = evtPos(e);
+  mouse.x = p.x; mouse.y = p.y;
+
+  const state = {
+    id: e.pointerId,
+    startX: p.x, startY: p.y,
+    x: p.x, y: p.y,
+    lastX: p.x, lastY: p.y,
+    moved: false,
+    mode: null,
+    node: null,
+    nodes: []
+  };
+
+  const antGrab = blobR * 0.22;
+  const nearAnt = nearestNode(p.x, p.y, antNodes);
+
+  if (nearAnt.dist < antGrab) {
+    state.mode = 'antenna';
+    state.node = nearAnt.node;
+  } else {
+    const grabRadius = blobR * GRAB_RADIUS_RATIO;
+    const grabbed = grabNodesInRadius(p.x, p.y, grabRadius);
+
+    if (grabbed.length) {
+      state.mode = 'softnode';
+      state.nodes = grabbed;
+    } else if (isInside(p.x, p.y)) {
+      state.mode = 'body';
+    }
+  }
+
+  if (state.mode) {
+    activeDrags.set(e.pointerId, state);
+    try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+}
+
+function moveDrag(e) {
+  if (isUIEvent(e)) return;
+  const state = activeDrags.get(e.pointerId);
+  if (!state) return;
+
+  e.preventDefault();
+
+  const p = evtPos(e);
+  mouse.x = p.x; mouse.y = p.y;
+
+  if (!state.moved) {
+    const dx = p.x - state.startX;
+    const dy = p.y - state.startY;
+    if (Math.hypot(dx, dy) > DRAG_THRESH) state.moved = true;
+  }
+
+  state.x = p.x;
+  state.y = p.y;
+}
+
+function endDrag(e, cancelled = false) {
+  if (isUIEvent(e)) return;
+  const state = activeDrags.get(e.pointerId);
+  if (!state) return;
+
+  e.preventDefault();
+
+  if (!cancelled && !state.moved) {
+    poke(state.x, state.y);
+  }
+
+  activeDrags.delete(e.pointerId);
+  try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+}
+
+/* Pointer Events support simultaneous fingers natively. */
+canvas.addEventListener('pointerdown', beginDrag, { passive: false });
+canvas.addEventListener('pointermove', moveDrag, { passive: false });
+canvas.addEventListener('pointerup', e => endDrag(e, false), { passive: false });
+canvas.addEventListener('pointercancel', e => endDrag(e, true), { passive: false });
+
+canvas.addEventListener('lostpointercapture', e => {
+  if (activeDrags.has(e.pointerId)) activeDrags.delete(e.pointerId);
+});
+
+canvas.addEventListener('dblclick', (e) => {
+  if (isUIEvent(e)) return;
+  e.preventDefault();
+  blobHue = Math.random() * 360;
+  updateColors();
+  initParticles();
+  document.getElementById('s-color').value = hslToHex(blobHue, 68, 52);
+  antImpulseY = Math.max(-MAX_IMPULSE, antImpulseY - 100);
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); createBlob(); surpriseTimer = 0; }
+});
+
+/* ==================== OPTIONS PANEL LOGIC ==================== */
+const optsBtn   = document.getElementById('opts-btn');
+const optsPanel = document.getElementById('opts-panel');
+
+optsBtn.addEventListener('click', () => {
+  optsPanel.classList.toggle('open');
+  optsBtn.classList.toggle('open');
+});
+optsPanel.addEventListener('touchstart', e => e.stopPropagation(), { passive: false });
+optsPanel.addEventListener('touchmove', e => e.stopPropagation(), { passive: false });
+
+/* Slider definitions */
+const sliderDefs = [
+  ['s-bodyK', 'v-bodyK', v => { bodyKMul = v; },       v => v.toFixed(2)],
+  ['s-bodyD', 'v-bodyD', v => { bodyDMul = v; },       v => v.toFixed(2)],
+  ['s-press', 'v-press', v => { pressMul = v; },        v => v.toFixed(2)],
+  ['s-grav',  'v-grav',  v => { gravityVal = v; },      v => Math.round(v).toString()],
+  ['s-damp',  'v-damp',  v => { nodeDampVal = v; },     v => v.toFixed(3)],
+  ['s-bSpd',  'v-bSpd',  v => { breathSpeedVal = v; },  v => v.toFixed(2)],
+  ['s-bAmp',  'v-bAmp',  v => { breathAmpVal = v; },    v => v.toFixed(3)],
+  ['s-antK',  'v-antK',  v => { antKMul = v; },        v => v.toFixed(2)],
+  ['s-antD',  'v-antD',  v => { antDMul = v; },        v => v.toFixed(2)],
+  ['s-face',  'v-face',  v => { faceRigidity = v; },    v => v.toFixed(2)],
+  ['s-sub',   'v-sub',   v => { substepsVal = v; },     v => Math.round(v).toString()],
+];
+
+sliderDefs.forEach(([sid, vid, setter, fmt]) => {
+  const slider = document.getElementById(sid);
+  const display = document.getElementById(vid);
+  slider.addEventListener('input', () => {
+    const v = parseFloat(slider.value);
+    setter(v);
+    display.textContent = fmt(v);
+  });
+});
+
+/* Size slider — recreates blob to apply new size */
+const sizeSlider = document.getElementById('s-size');
+const sizeDisplay = document.getElementById('v-size');
+let sizeTimeout = null;
+sizeSlider.addEventListener('input', () => {
+  const v = parseFloat(sizeSlider.value);
+  sizeMul = v;
+  sizeDisplay.textContent = v.toFixed(2);
+  /* Debounce recreation so it doesn't stutter while dragging */
+  clearTimeout(sizeTimeout);
+  sizeTimeout = setTimeout(() => { createBlob(); surpriseTimer = 0; }, 40);
+});
+
+/* Color picker */
+const colorInput = document.getElementById('s-color');
+colorInput.value = hslToHex(blobHue, 68, 52);
+colorInput.addEventListener('input', () => {
+  blobHue = hexToHue(colorInput.value);
+  updateColors();
+  initParticles();
+});
+
+/* Gravity center dropdown */
+const gravCenterSelect = document.getElementById('s-gravCenter');
+gravCenterSelect.addEventListener('change', () => {
+  gravityCenter = gravCenterSelect.value;
+  createBlob();
+  surpriseTimer = 0;
+});
+
+/* Defaults */
+const defaults = {
+  's-bodyK': 1, 's-bodyD': 1, 's-press': 1, 's-grav': 280,
+  's-damp': 0.984, 's-bSpd': prefersReduced ? 0.2 : 0.7, 's-bAmp': 0.028,
+  's-antK': 1, 's-antD': 1, 's-face': 0.8, 's-sub': 4,
+  's-size': 1, 's-gravCenter': 'bottom'
+};
+
+document.getElementById('btn-defaults').addEventListener('click', () => {
+  sliderDefs.forEach(([sid, vid, setter, fmt]) => {
+    const slider = document.getElementById(sid);
+    const display = document.getElementById(vid);
+    slider.value = defaults[sid];
+    const v = parseFloat(defaults[sid]);
+    setter(v);
+    display.textContent = fmt(v);
+  });
+  /* Reset size */
+  sizeSlider.value = defaults['s-size'];
+  sizeMul = parseFloat(defaults['s-size']);
+  sizeDisplay.textContent = parseFloat(defaults['s-size']).toFixed(2);
+  /* Reset color */
+  blobHue = 25;
+  updateColors();
+  colorInput.value = hslToHex(blobHue, 68, 52);
+  initParticles();
+  /* Reset gravity center */
+  gravCenterSelect.value = defaults['s-gravCenter'];
+  gravityCenter = defaults['s-gravCenter'];
+  createBlob();
+  surpriseTimer = 0;
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  createBlob();
+  surpriseTimer = 0;
+});
+
+/* ==================== CATMULL-ROM SPLINE ==================== */
+function splinePoints(pts, segs) {
+  segs = segs || 6;
+  const out = [], n = pts.length;
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i];
+    const p2 = pts[(i + 1) % n],     p3 = pts[(i + 2) % n];
+    for (let t = 0; t < segs; t++) {
+      const tt = t / segs, tt2 = tt * tt, tt3 = tt2 * tt;
+      out.push({
+        x: 0.5 * ((2*p1.x)+(-p0.x+p2.x)*tt+(2*p0.x-5*p1.x+4*p2.x-p3.x)*tt2+(-p0.x+3*p1.x-3*p2.x+p3.x)*tt3),
+        y: 0.5 * ((2*p1.y)+(-p0.y+p2.y)*tt+(2*p0.y-5*p1.y+4*p2.y-p3.y)*tt2+(-p0.y+3*p1.y-3*p2.y+p3.y)*tt3)
+      });
+    }
+  }
+  return out;
+}
+
+/* ==================== BACKGROUND ==================== */
+function drawBG() {
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0d1b2a');
+  g.addColorStop(0.5, '#152238');
+  g.addColorStop(1, '#0a1628');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.025)';
+  const step = 50;
+  for (let x = step / 2; x < W; x += step)
+    for (let y = step / 2; y < H; y += step) {
+      ctx.beginPath(); ctx.arc(x, y, 1, 0, 6.2832); ctx.fill();
+    }
+
+  if (gravityCenter === 'bottom') {
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, H - FLOOR_Y_OFFSET); ctx.lineTo(W, H - FLOOR_Y_OFFSET); ctx.stroke();
+  }
+  if (gravityCenter === 'center') {
+    const gcx = W / 2, gcy = H / 2;
+    ctx.save(); ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(gcx - 12, gcy); ctx.lineTo(gcx + 12, gcy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(gcx, gcy - 12); ctx.lineTo(gcx, gcy + 12); ctx.stroke();
+    ctx.beginPath(); ctx.arc(gcx, gcy, 4, 0, 6.2832); ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ==================== PARTICLES ==================== */
+let particles = [];
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < 35; i++) {
+    particles.push({
+      x: Math.random() * W, y: Math.random() * H,
+      r: 1 + Math.random() * 2.5,
+      vx: (Math.random() - 0.5) * (prefersReduced ? 3 : 14),
+      vy: (Math.random() - 0.5) * (prefersReduced ? 3 : 14),
+      a: 0.08 + Math.random() * 0.22,
+      hue: (blobHue + (Math.random() - 0.5) * 60 + 360) % 360
+    });
+  }
+}
+
+function updateParticles(dt) {
+  for (const p of particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.x < -20) p.x += W + 40;
+    if (p.x > W + 20) p.x -= W + 40;
+    if (p.y < -20) p.y += H + 40;
+    if (p.y > H + 20) p.y -= H + 40;
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 6.2832);
+    ctx.fillStyle = `hsla(${p.hue},55%,70%,${p.a})`;
+    ctx.fill();
+  }
+}
+
+/* ==================== BLOB RENDERING ==================== */
+function traceSpline() {
+  const pts = nodes.map(n => ({ x: n.x, y: n.y }));
+  const sp = splinePoints(pts, 6);
+  ctx.beginPath();
+  ctx.moveTo(sp[0].x, sp[0].y);
+  for (let i = 1; i < sp.length; i++) ctx.lineTo(sp[i].x, sp[i].y);
+  ctx.closePath();
+  return sp;
+}
+
+function drawBlob() {
+  const center = getCenter();
+  const r = blobR;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 30; ctx.shadowOffsetX = 6; ctx.shadowOffsetY = 12;
+  traceSpline(); ctx.fillStyle = 'rgba(0,0,0,0.01)'; ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  traceSpline();
+  const gOff = r * 0.3;
+  const grad = ctx.createRadialGradient(
+    center.x - gOff, center.y - gOff * 1.3, r * 0.05,
+    center.x + gOff * 0.3, center.y + gOff * 0.5, r * 1.3
+  );
+  grad.addColorStop(0, blobColHL);
+  grad.addColorStop(0.35, blobColLight);
+  grad.addColorStop(0.7, blobCol);
+  grad.addColorStop(1, blobColDark);
+  ctx.fillStyle = grad; ctx.fill();
+  ctx.strokeStyle = blobColDark; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(center.x - r * 0.18, center.y - r * 0.38, r * 0.32, r * 0.16, -0.25, 0, 6.2832);
+  const hg = ctx.createRadialGradient(
+    center.x - r * 0.18, center.y - r * 0.38, 0,
+    center.x - r * 0.18, center.y - r * 0.38, r * 0.32
+  );
+  hg.addColorStop(0, 'rgba(255,255,255,0.55)');
+  hg.addColorStop(0.6, 'rgba(255,255,255,0.12)');
+  hg.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = hg; ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.ellipse(center.x + r * 0.15, center.y - r * 0.55, r * 0.1, r * 0.06, 0.3, 0, 6.2832);
+  ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fill();
+  ctx.restore();
+
+  drawFace(center, r);
+  drawAntenna();
+}
+
+/* ==================== FACE ==================== */
+let blinkTimer = 0, blinkState = 0, blinkProg = 0, nextBlink = 2 + Math.random() * 3;
+let eyeJX = 0, eyeJY = 0, prevVX = 0, prevVY = 0;
+
+function drawFace(c, r) {
+  const speed = getSpeed();
+  const comp = calcArea() / restArea;
+  surpriseTimer = Math.max(0, surpriseTimer - (1 / 60));
+
+  const vel = getAvgVel();
+  eyeJX += ((vel.x - prevVX) * 0.015 - eyeJX) * 0.12;
+  eyeJY += ((vel.y - prevVY) * 0.015 - eyeJY) * 0.12;
+  prevVX = vel.x; prevVY = vel.y;
+
+  let l = Infinity, ri = -Infinity, t = Infinity, b = -Infinity;
+  for (const n of nodes) { l = Math.min(l, n.x); ri = Math.max(ri, n.x); t = Math.min(t, n.y); b = Math.max(b, n.y); }
+  const bw = Math.max(ri - l, 1), bh = Math.max(b - t, 1);
+  const rawSx = bw / (r * 2), rawSy = bh / (r * 2);
+
+  const deform = 1 - faceRigidity;
+  const fsx = 1 + (rawSx - 1) * deform;
+  const fsy = 1 + (rawSy - 1) * deform;
+
+  const eyeSpX = r * 0.42 * fsx;
+  const eyeY = c.y - r * 0.12 * fsy + eyeJY;
+  const lx = c.x - eyeSpX + eyeJX, rx = c.x + eyeSpX + eyeJX;
+  let eyeR = r * 0.2 * (1 + surpriseTimer * 0.4);
+  eyeR = Math.max(eyeR, 4);
+
+  blinkTimer += 1 / 60;
+  if (blinkState === 0 && blinkTimer > nextBlink) { blinkState = 1; blinkProg = 0; blinkTimer = 0; }
+  if (blinkState === 1) { blinkProg += 0.18; if (blinkProg >= 1) blinkState = 2; }
+  if (blinkState === 2) { blinkProg -= 0.14; if (blinkProg <= 0) { blinkState = 0; blinkProg = 0; blinkTimer = 0; nextBlink = 1.8 + Math.random() * 3.5; } }
+  const openness = 1 - blinkProg;
+
+  const blushA = 0.18 + surpriseTimer * 0.15;
+  const blushR = eyeR * 0.75;
+  ctx.save(); ctx.globalAlpha = blushA;
+  ctx.fillStyle = 'hsl(350,65%,62%)';
+  ctx.beginPath(); ctx.arc(c.x - eyeSpX * 0.65, c.y + r * 0.1 * fsy, blushR, 0, 6.2832); ctx.fill();
+  ctx.beginPath(); ctx.arc(c.x + eyeSpX * 0.65, c.y + r * 0.1 * fsy, blushR, 0, 6.2832); ctx.fill();
+  ctx.restore();
+
+  drawEye(lx, eyeY, eyeR, openness);
+  drawEye(rx, eyeY, eyeR, openness);
+  drawBrows(lx, rx, eyeY, eyeR, speed, comp);
+  drawMouth(c, r, fsx, fsy, speed, comp);
+}
+
+function drawEye(x, y, r, open) {
+  if (open < 0.08) {
+    ctx.save(); ctx.beginPath();
+    ctx.moveTo(x - r, y); ctx.quadraticCurveTo(x, y + r * 0.35, x + r, y);
+    ctx.strokeStyle = '#2a1f1f'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.restore(); return;
+  }
+  const eyeH = r * open;
+  ctx.save(); ctx.beginPath();
+  ctx.ellipse(x, y, r, eyeH, 0, 0, 6.2832);
+  ctx.fillStyle = '#fffef8'; ctx.fill();
+  ctx.strokeStyle = '#2a1f1f'; ctx.lineWidth = 1.8; ctx.stroke(); ctx.clip();
+
+  const dx = mouse.x - x, dy = mouse.y - y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  const maxOff = r * 0.32;
+  const off = Math.min(d * 0.04, maxOff);
+  const px = d > 0.5 ? dx / d * off : 0;
+  const py = d > 0.5 ? dy / d * off : 0;
+
+  const iR = r * 0.48;
+  ctx.beginPath(); ctx.arc(x + px, y + py, iR, 0, 6.2832);
+  ctx.fillStyle = '#2a1f1f'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x + px, y + py, iR * 0.5, 0, 6.2832);
+  ctx.fillStyle = '#0a0808'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x + px - iR * 0.3, y + py - iR * 0.3, iR * 0.22, 0, 6.2832);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fill();
+  ctx.beginPath(); ctx.arc(x + px + iR * 0.22, y + py + iR * 0.18, iR * 0.1, 0, 6.2832);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fill();
+  ctx.restore();
+}
+
+function drawBrows(lx, rx, ey, er, speed, comp) {
+  let raise = 0, furrow = 0;
+  if (speed > 120) raise = Math.min((speed - 120) / 180, 1);
+  if (surpriseTimer > 0) raise = Math.max(raise, surpriseTimer * 2.5);
+  if (comp < 0.88) furrow = Math.min((0.88 - comp) / 0.12, 1);
+
+  const by = ey - er * 1.45 - raise * er * 0.55;
+  const bw = er * 0.85;
+  const fa = furrow * 0.35;
+
+  ctx.save();
+  ctx.lineWidth = Math.max(2, er * 0.14); ctx.lineCap = 'round';
+  ctx.strokeStyle = blobColDark;
+  ctx.beginPath(); ctx.moveTo(lx - bw, by + fa * er);
+  ctx.quadraticCurveTo(lx, by - raise * er * 0.3, lx + bw, by - fa * er); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(rx - bw, by - fa * er);
+  ctx.quadraticCurveTo(rx, by - raise * er * 0.3, rx + bw, by + fa * er); ctx.stroke();
+  ctx.restore();
+}
+
+function drawMouth(c, r, fsx, fsy, speed, comp) {
+  const my = c.y + r * 0.38 * fsy;
+  const mw = r * 0.35 * fsx;
+  const mh = r * 0.14 * fsy;
+  const dragged = activeDrags.size > 0;
+  const surprised = speed > 180 || surpriseTimer > 0.15;
+  const squashed = comp < 0.86;
+
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = 2;
+
+  if (dragged) {
+    const gw = mw * 1.3;
+    ctx.beginPath(); ctx.moveTo(c.x - gw, my);
+    ctx.quadraticCurveTo(c.x, my + mh * 2.2, c.x + gw, my);
+    ctx.strokeStyle = blobColDark; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(c.x - gw, my);
+    ctx.quadraticCurveTo(c.x, my + mh * 2.2, c.x + gw, my);
+    ctx.quadraticCurveTo(c.x, my + mh * 0.5, c.x - gw, my);
+    ctx.fillStyle = `hsl(${blobHue},55%,22%)`; ctx.fill();
+  } else if (surprised) {
+    const oW = mw * 0.55, oH = mh * 1.6 + surpriseTimer * mh;
+    ctx.beginPath(); ctx.ellipse(c.x, my + mh * 0.3, oW, oH, 0, 0, 6.2832);
+    ctx.fillStyle = `hsl(${blobHue},55%,22%)`; ctx.fill();
+    ctx.strokeStyle = blobColDark; ctx.lineWidth = 1.8; ctx.stroke();
+  } else if (squashed) {
+    ctx.beginPath(); ctx.moveTo(c.x - mw, my);
+    for (let i = 1; i <= 8; i++) {
+      const t = i / 8;
+      ctx.lineTo(c.x - mw + t * mw * 2, my + Math.sin(t * Math.PI * 3.5 + time * 8) * mh * 0.6);
+    }
+    ctx.strokeStyle = blobColDark; ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.moveTo(c.x - mw, my);
+    ctx.quadraticCurveTo(c.x, my + mh * 1.6, c.x + mw, my);
+    ctx.strokeStyle = blobColDark; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* ==================== ANTENNA ==================== */
+function drawAntenna() {
+  if (!antNodes.length) return;
+  const all = [nodes[0], ...antNodes];
+  const tip = antNodes[antNodes.length - 1];
+  const tipSpeed = Math.sqrt(tip.vx * tip.vx + tip.vy * tip.vy);
+  const energy = Math.min(tipSpeed / 300, 1);
+
+  function traceStalk() {
+    ctx.beginPath(); ctx.moveTo(all[0].x, all[0].y);
+    if (all.length >= 3) {
+      for (let i = 1; i < all.length - 1; i++) {
+        const mx = (all[i].x + all[i + 1].x) * 0.5;
+        const my = (all[i].y + all[i + 1].y) * 0.5;
+        ctx.quadraticCurveTo(all[i].x, all[i].y, mx, my);
+      }
+      ctx.lineTo(all[all.length - 1].x, all[all.length - 1].y);
+    } else {
+      for (let i = 1; i < all.length; i++) ctx.lineTo(all[i].x, all[i].y);
+    }
+  }
+
+  ctx.save(); traceStalk();
+  ctx.strokeStyle = blobColDark; ctx.lineWidth = 3.8;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.restore();
+
+  ctx.save(); traceStalk();
+  ctx.strokeStyle = blobCol; ctx.lineWidth = 2.4;
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.restore();
+
+  const ballR = 6 + energy * 2.5;
+
+  if (energy > 0.08) {
+    ctx.save();
+    const glowR = ballR + 6 + energy * 12;
+    ctx.beginPath(); ctx.arc(tip.x, tip.y, glowR, 0, 6.2832);
+    const glowG = ctx.createRadialGradient(tip.x, tip.y, ballR, tip.x, tip.y, glowR);
+    glowG.addColorStop(0, `hsla(${blobHue},75%,72%,${energy * 0.4})`);
+    glowG.addColorStop(1, `hsla(${blobHue},75%,72%,0)`);
+    ctx.fillStyle = glowG; ctx.fill(); ctx.restore();
+  }
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 5; ctx.shadowOffsetY = 2;
+  ctx.beginPath(); ctx.arc(tip.x, tip.y, ballR, 0, 6.2832);
+  const bg = ctx.createRadialGradient(tip.x - 1.5, tip.y - 1.5, 0, tip.x, tip.y, ballR);
+  bg.addColorStop(0, `hsl(${blobHue},78%,78%)`);
+  bg.addColorStop(1, blobCol);
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.strokeStyle = blobColDark; ctx.lineWidth = 1.2; ctx.stroke();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.arc(tip.x - ballR * 0.3, tip.y - ballR * 0.3, ballR * 0.25, 0, 6.2832);
+  ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
+}
+
+/* ==================== HUD ==================== */
+function drawHUD() {
+  ctx.save();
+  ctx.font = '12px "Courier New", monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.textAlign = 'left';
+  ctx.fillText('Click to poke \u00B7 Drag body or antenna \u00B7 Double-click to recolor \u00B7 Space to reset', 14, H - 14);
+  ctx.restore();
+}
+
+/* ==================== MAIN LOOP ==================== */
+let lastT = 0;
+
+function loop(ts) {
+  let dt = (ts - lastT) / 1000;
+  lastT = ts;
+  if (dt <= 0 || dt > 0.05) dt = 1 / 60;
+
+  const subDt = dt / substepsVal;
+  for (let i = 0; i < substepsVal; i++) physicsStep(subDt);
+
+  updateParticles(dt);
+  drawBG();
+  drawParticles();
+  drawBlob();
+  drawHUD();
+
+  requestAnimationFrame(loop);
+}
+
+/* ==================== INIT ==================== */
+function init() {
+  resize();
+  mouse.x = W / 2;
+  mouse.y = H / 2;
+  createBlob();
+  initParticles();
+  /* Sync color picker to initial hue */
+  colorInput.value = hslToHex(blobHue, 68, 52);
+  requestAnimationFrame(loop);
+}
+init();
+</script>
+</body>
+</html>
